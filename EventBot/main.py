@@ -17,14 +17,15 @@ class clsServer():
         self.bot = "Bot"
         self.botID = 141744010212409344
         self.adminChannel = ""
-        self.teams = 1
+        self.teams = 3
 
 class clsTeam():
     """Class that represents a single team"""
     def __init__(self):
         self.teamName = ""
         self.teamID = ""
-        self.teamLeader = ""
+        self.teamLeaderUser = ""
+        self.teamLeaderID = ""
         self.generalChannel = ""
         self.responseChannel = ""
         self.announcementChannel = ""
@@ -84,12 +85,21 @@ async def delete(ctx):
         await responseChannel.delete()
 
         teamID = guild.get_role(teamDict[team].teamID)
-        leaderID = guild.get_role(teamDict[team].teamLeader)
+        leaderID = guild.get_role(teamDict[team].teamLeaderID)
 
         await teamID.delete()
         await leaderID.delete()
 
-        await ctx.send("Deleted roles and channels")
+    await ctx.send("Deleted roles and channels")
+
+@bot.command()
+@commands.has_any_role(server.admin)
+async def deleterole(ctx,id):
+    guild = ctx.message.guild
+    role = guild.get_role(id)
+    await role.delete()
+
+    await ctx.send("Deleted role")
 
 @bot.command()
 @commands.has_any_role(server.admin)
@@ -108,7 +118,7 @@ async def publish(ctx,arg):
     for team in teamDict:
         announcementChannel = guild.get_channel(teamDict[team].announcementChannel)
         await announcementChannel.send(arg)
-        await ctx.message.channel.send("Message published to team announcement channels")
+    await ctx.message.channel.send("Message published to team announcement channels")
 
 @bot.command()
 @commands.has_any_role(server.admin)
@@ -119,7 +129,7 @@ async def generate(ctx):
         teamDict[team].teamID = memberrole.id
 
         leaderrole = await guild.create_role(name=teamDict[team].teamName+"-leader")
-        teamDict[team].teamID = memberrole.id
+        teamDict[team].teamLeaderID = leaderrole.id
 
         category = await guild.create_category_channel(teamDict[team].teamName)
 
