@@ -17,6 +17,7 @@ class clsServer():
         self.bot = "Bot"
         self.botID = 141744010212409344
         self.adminChannel = ""
+        self.teams = 1
 
 class clsTeam():
     """Class that represents a single team"""
@@ -24,7 +25,7 @@ class clsTeam():
         self.teamName = ""
         self.teamID = ""
         self.teamLeader = ""
-        self.generalchannel = ""
+        self.generalChannel = ""
         self.responseChannel = ""
         self.announcementChannel = ""
 
@@ -39,13 +40,13 @@ if os.path.exists('teams'):
         filehandler = open('teams', 'rb') 
         object = pickle.load(filehandler)
     except:
-        for x in range(2):
+        for x in range(server.teams):
             teamDict["Team-"+str(x)] = clsTeam()
             teamDict["Team-"+str(x)].teamName = "Team-"+str(x)
         filehandler = open('teams', 'wb')
         pickle.dump(teamDict, filehandler)
 else:
-    for x in range(2):
+    for x in range(server.teams):
         teamDict["Team-"+str(x)] = clsTeam()
         teamDict["Team-"+str(x)].teamName = "Team-"+str(x)
     filehandler = open('teams', 'wb')
@@ -71,13 +72,43 @@ async def save(ctx,id):
 
 @bot.command()
 @commands.has_any_role(server.admin)
-async def generatechannels(ctx,arg):
-    botrole = ctx.message.guild.get_role(141744010212409344)
-    channel = await ctx.message.guild.create_text_channel(arg)
-    await channel.set_permissions(ctx.message.author, read_messages=True, send_messages=True)
-    await channel.set_permissions(botrole, send_messages=True,read_messages=True)
-    await channel.set_permissions(ctx.message.guild.default_role, send_messages=False,read_messages=False)
-    await ctx.send(channel.id)
+async def delete(ctx):
+    guild = ctx.message.guild
+    for team in teamDict:
+        announcementChannel = guild.get_channel(teamDict[team].announcementChannel)
+        generalChannel = guild.get_channel(teamDict[team].generalChannel)
+        responseChannel = guild.get_channel(teamDict[team].responseChannel)
+
+        await announcementChannel.delete()
+        await generalChannel.delete()
+        await responseChannel.delete()
+
+        teamID = guild.get_role(teamDict[team].teamID)
+        leaderID = guild.get_role(teamDict[team].teamLeader)
+
+        await teamID.delete()
+        await leaderID.delete()
+
+        await ctx.send("Deleted roles and channels")
+
+@bot.command()
+@commands.has_any_role(server.admin)
+async def setteamnumber(ctx,arg):
+    arg = int(arg)
+    if arg > 0 and arg <= 10:
+        server.teams = arg
+        await ctx.send("Server team number set to" + str(arg))
+    else:
+        await ctx.send("Team number must be an integer greater than 1 and less than or equal to 10")
+
+@bot.command()
+@commands.has_any_role(server.admin)
+async def publish(ctx,arg):
+    guild = ctx.message.guild
+    for team in teamDict:
+        announcementChannel = guild.get_channel(teamDict[team].announcementChannel)
+        await announcementChannel.send(arg)
+        await ctx.message.channel.send("Message published to team announcement channels")
 
 @bot.command()
 @commands.has_any_role(server.admin)
@@ -102,26 +133,28 @@ async def generate(ctx):
         await announcementchannel.edit(category=category)
         teamDict[team].announcementChannel = announcementchannel.id
 
-        generalchannel = await ctx.message.guild.create_text_channel(teamDict[team].teamName+"-general")
-        await generalchannel.set_permissions(guild.get_role(114423908836442115), read_messages=True, send_messages=True)
-        await generalchannel.set_permissions(memberrole, send_messages=True,read_messages=True)
-        await generalchannel.set_permissions(guild.get_role(141744010212409344), send_messages=True,read_messages=True)
-        await generalchannel.set_permissions(guild.default_role, send_messages=False,read_messages=False)
-        await generalchannel.set_permissions(guild.get_role(687811162804584465), send_messages=False,read_messages=False)
-        await generalchannel.set_permissions(guild.get_role(451457105145364480), send_messages=False,read_messages=False)
-        await generalchannel.edit(category=category)
-        teamDict[team].generalchannel = generalchannel.id
+        generalChannel = await ctx.message.guild.create_text_channel(teamDict[team].teamName+"-general")
+        await generalChannel.set_permissions(guild.get_role(114423908836442115), read_messages=True, send_messages=True)
+        await generalChannel.set_permissions(memberrole, send_messages=True,read_messages=True)
+        await generalChannel.set_permissions(guild.get_role(141744010212409344), send_messages=True,read_messages=True)
+        await generalChannel.set_permissions(guild.default_role, send_messages=False,read_messages=False)
+        await generalChannel.set_permissions(guild.get_role(687811162804584465), send_messages=False,read_messages=False)
+        await generalChannel.set_permissions(guild.get_role(451457105145364480), send_messages=False,read_messages=False)
+        await generalChannel.edit(category=category)
+        teamDict[team].generalChannel = generalChannel.id
 
-        submissionchannel = await ctx.message.guild.create_text_channel(teamDict[team].teamName+"-answers")
-        await submissionchannel.set_permissions(guild.get_role(114423908836442115), read_messages=True, send_messages=True)   #@Admin
-        await submissionchannel.set_permissions(memberrole, send_messages=False,read_messages=True)                           #Team member
-        await submissionchannel.set_permissions(leaderrole, send_messages=False,read_messages=True)                           #Leader role
-        await submissionchannel.set_permissions(guild.get_role(141744010212409344), send_messages=False,read_messages=True)   #Bot role
-        await submissionchannel.set_permissions(guild.default_role, send_messages=False,read_messages=False)                  #@everyone
-        await submissionchannel.set_permissions(guild.get_role(687811162804584465), send_messages=False,read_messages=False)  #ARG muted
-        await submissionchannel.set_permissions(guild.get_role(451457105145364480), send_messages=False,read_messages=False)  #Server mtued
-        await submissionchannel.edit(category=category)
-        teamDict[team].submissionchannel = submissionchannel.id
+        responseChannel = await ctx.message.guild.create_text_channel(teamDict[team].teamName+"-answers")
+        await responseChannel.set_permissions(guild.get_role(114423908836442115), read_messages=True, send_messages=True)   #@Admin
+        await responseChannel.set_permissions(memberrole, send_messages=False,read_messages=True)                           #Team member
+        await responseChannel.set_permissions(leaderrole, send_messages=True,read_messages=True)                           #Leader role
+        await responseChannel.set_permissions(guild.get_role(141744010212409344), send_messages=False,read_messages=True)   #Bot role
+        await responseChannel.set_permissions(guild.default_role, send_messages=False,read_messages=False)                  #@everyone
+        await responseChannel.set_permissions(guild.get_role(687811162804584465), send_messages=False,read_messages=False)  #ARG muted
+        await responseChannel.set_permissions(guild.get_role(451457105145364480), send_messages=False,read_messages=False)  #Server mtued
+        await responseChannel.edit(category=category)
+        teamDict[team].responseChannel = responseChannel.id
+
+        await ctx.message.channel.send("Roles and channels generated.")
         
 
 owner = bot.get_user(226666366751604736)
