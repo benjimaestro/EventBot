@@ -5,6 +5,8 @@ from discord.utils import get
 import asyncio
 import pickle
 import os
+import random
+import pprint
 bot = commands.Bot(command_prefix='=', help_command=None)
 
 class clsServer():
@@ -70,6 +72,41 @@ async def save(ctx,id):
     filehandler = open('teams', 'wb')
     pickle.dump(teamDict, filehandler)
     await ctx.send("State saved")
+
+@bot.command()
+@commands.has_any_role(server.admin)
+async def rolemembers(ctx,arg):
+    arg = int(arg)
+    guild = ctx.message.guild
+    role = guild.get_role(687814139065925647)
+    memberList = []
+    output = ""
+    if role is None:
+        await ctx.send('There is no participant role!')
+        return
+    empty = True
+    for member in guild.members:
+        if role in member.roles:
+            #await ctx.send("{0.name}: {0.id}".format(member))
+            empty = False
+            memberList.append(member)
+    if empty:
+        pass
+        #await ctx.send("Nobody has the role {}".format(role.mention))
+    random.shuffle(memberList)
+
+    def chunks(lst, n):
+        for i in range(0, len(lst), n):
+            yield lst[i:i + n]
+    memberListSplit = list(chunks(memberList, arg))
+    x = 0
+    for team in memberListSplit:
+        output += "Team "+str(x)+"\n"
+        x += 1
+        for member in team:
+            output += "{0.name}: {0.id}".format(member) + "\n"
+    await ctx.send(output)
+
 
 @bot.command()
 @commands.has_any_role(server.admin)
