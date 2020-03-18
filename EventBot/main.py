@@ -13,7 +13,7 @@ class clsServer():
     """Stores information about the server the bot is running on, as well as bot settings"""
     def __init__(self):
         self.guild = bot.get_guild(114407194971209731)#114407194971209731
-        self.token = 
+        self.token = open("key.txt", "r").read()
         self.admin = "Admin"
         self.adminID = 114423908836442115
         self.bot = "Bot"
