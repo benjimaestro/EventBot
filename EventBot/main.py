@@ -52,7 +52,7 @@ class clsTeam():
         self.generalChannel = imported["generalChannel"]
         self.responseChannel = imported["responseChannel"]
         self.announcementChannel = imported["announcementChannel"]
-        self.vote = {"timestamp":0,"type":"votekick","status":"failed","targetID":0,"messageID":0,"channelID":0}#imported["vote"]
+        self.vote = {"timestamp":0,"type":"votekick","status":"finished","targetID":0,"messageID":0,"channelID":0}#imported["vote"]
         self.mutes = imported["mutes"]
 
 
@@ -91,6 +91,16 @@ async def autosave():
     await bot.wait_until_ready()
     while not bot.is_closed():
         for x in range(server.teams):
+            print(teamDict["Team-"+str(x)].mutes)
+            for mute in teamDict["Team-"+str(x)].mutes:
+                if time.time() > (mute["timestamp"] + mute["length"]) and mute['status'] == "active":
+                    guild = bot.get_guild(114407194971209731)
+                    muteRole = guild.get_role(687811162804584465)
+                    mutedMember = guild.get_member(mute["targetID"])
+                    await mutedMember.remove_roles(muteRole)
+                    mute['status'] = "finished"
+                    teamDict["Team-"+str(x)].mutes.remove(mute)
+            
             if teamDict["Team-"+str(x)].vote["status"] == "active":
                 message = await bot.get_channel(teamDict["Team-"+str(x)].vote["channelID"]).fetch_message(teamDict["Team-"+str(x)].vote["messageID"])
                 
@@ -117,7 +127,7 @@ async def autosave():
                             guild = bot.get_guild(114407194971209731)
                             user = guild.get_member(teamDict["Team-"+str(x)].vote["targetID"])
                             role = guild.get_role(teamDict["Team-"+str(x)].teamID)
-                            await bot.remove_roles(user, role)
+                            await user.remove_roles(role)
                         else:
                             pool = []
                             guild = bot.get_guild(114407194971209731)
@@ -135,7 +145,7 @@ async def autosave():
                             teamDict["Team-"+str(x)].teamLeaderUser = newLeader.id
                             channel = guild.get_channel(teamDict["Team-"+str(x)].generalChannel)
                             await channel.send("Vote results: YES wins")
-                            await channel.send(" was set as leader")
+                            await channel.send(newLeader.name+" was set as leader")
 
                     else:
                         channel = guild.get_channel(teamDict["Team-"+str(x)].generalChannel)
@@ -171,6 +181,36 @@ async def votekick(ctx,arg):
                 teamDict[team].vote = {"timestamp":int(time.time()),"type":"votekick","status":"active","targetID":kickMember.id,"messageID":message.id,"channelID":ctx.channel.id}
             else:
                 await ctx.send("You must wait at least an hour after the last vote to start another!")
+
+@bot.command()
+async def mute(ctx,arg, arg2):
+    guild = ctx.message.guild
+    muteMember = guild.get_member(int(arg[3:-1]))
+    for role in ctx.message.author.roles:
+        if "leader" in role.name:
+            team = "Team-"+role.name.split("-")[1]
+            try:
+                teamDict[team].mutes.append({"timestamp":int(time.time()),"status":"active","targetID":muteMember.id,"length":int(arg2)*60})
+                muteRole = guild.get_role(687811162804584465)
+                await ctx.send("Muting "+muteMember.nick+" for "+str(arg2)+" minutes")
+                await muteMember.add_roles(muteRole)
+            except Exception as e:
+                await ctx.send("Correct syntax is `=mute @user <time in minutes>`")
+                print("ERROR:",e)
+
+@bot.command()
+async def unmute(ctx,arg):
+    guild = ctx.message.guild
+    muteMember = guild.get_member(int(arg[3:-1]))
+    for role in ctx.message.author.roles:
+        if "leader" in role.name:
+            try:
+                await ctx.send("Unmuting "+muteMember.name)
+                muteRole = guild.get_role(687811162804584465)
+                await muteMember.remove_roles(muteRole)
+            except Exception as e:
+                await ctx.send("Correct syntax is `=unmute @user <time in minutes>`")
+                print("ERROR:",e)
 
 @bot.command()
 async def mutiny(ctx):
@@ -313,7 +353,7 @@ async def generate(ctx):
         await announcementchannel.set_permissions(memberrole, send_messages=False,read_messages=True)
         await announcementchannel.set_permissions(guild.get_role(141744010212409344), send_messages=True,read_messages=True)
         await announcementchannel.set_permissions(guild.default_role, send_messages=False,read_messages=False)
-        await announcementchannel.set_permissions(guild.get_role(687811162804584465), send_messages=False,read_messages=False)
+        await announcementchannel.set_permissions(guild.get_role(687811162804584465), send_messages=False,read_messages=True)
         await announcementchannel.set_permissions(guild.get_role(451457105145364480), send_messages=False,read_messages=False)
         await announcementchannel.edit(category=category)
         teamDict[team].announcementChannel = announcementchannel.id
@@ -323,7 +363,7 @@ async def generate(ctx):
         await generalChannel.set_permissions(memberrole, send_messages=True,read_messages=True)
         await generalChannel.set_permissions(guild.get_role(141744010212409344), send_messages=True,read_messages=True)
         await generalChannel.set_permissions(guild.default_role, send_messages=False,read_messages=False)
-        await generalChannel.set_permissions(guild.get_role(687811162804584465), send_messages=False,read_messages=False)
+        await generalChannel.set_permissions(guild.get_role(687811162804584465), send_messages=False,read_messages=True)
         await generalChannel.set_permissions(guild.get_role(451457105145364480), send_messages=False,read_messages=False)
         await generalChannel.edit(category=category)
         teamDict[team].generalChannel = generalChannel.id
@@ -334,7 +374,7 @@ async def generate(ctx):
         await responseChannel.set_permissions(leaderrole, send_messages=True,read_messages=True)                           #Leader role
         await responseChannel.set_permissions(guild.get_role(141744010212409344), send_messages=False,read_messages=True)   #Bot role
         await responseChannel.set_permissions(guild.default_role, send_messages=False,read_messages=False)                  #@everyone
-        await responseChannel.set_permissions(guild.get_role(687811162804584465), send_messages=False,read_messages=False)  #ARG muted
+        await responseChannel.set_permissions(guild.get_role(687811162804584465), send_messages=False,read_messages=True)  #ARG muted
         await responseChannel.set_permissions(guild.get_role(451457105145364480), send_messages=False,read_messages=False)  #Server mtued
         await responseChannel.edit(category=category)
         teamDict[team].responseChannel = responseChannel.id
