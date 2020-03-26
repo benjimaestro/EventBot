@@ -7,6 +7,7 @@ import pickle
 import os
 import random
 import pprint
+import time
 bot = commands.Bot(command_prefix='=', help_command=None)
 
 class clsServer():
@@ -31,40 +32,123 @@ class clsTeam():
         self.generalChannel = ""
         self.responseChannel = ""
         self.announcementChannel = ""
+        self.vote = {"timestamp":0,"type":"votekick","status":"failed","targetID":0,"messageID":0,"channelID":0}
+        self.mutes = []
+    def export(self):
+        return {"teamName":self.teamName,
+                "teamID":self.teamID,
+                "teamLeaderUser":self.teamLeaderUser,
+                "teamLeaderID":self.teamLeaderID,
+                "generalChannel":self.generalChannel,
+                "responseChannel":self.responseChannel,
+                "announcementChannel":self.announcementChannel,
+                "vote":self.vote,
+                "mutes":self.mutes}
+    def importTeam(self,imported):
+        self.teamName = imported["teamName"]
+        self.teamID = imported["teamID"]
+        self.teamLeaderUser = imported["teamLeaderUser"]
+        self.teamLeaderID = imported["teamLeaderID"]
+        self.generalChannel = imported["generalChannel"]
+        self.responseChannel = imported["responseChannel"]
+        self.announcementChannel = imported["announcementChannel"]
+        self.vote = {"timestamp":0,"type":"votekick","status":"failed","targetID":0,"messageID":0,"channelID":0}#imported["vote"]
+        self.mutes = imported["mutes"]
 
 
 
 
 server = clsServer()
 teamDict = {}
+pickleDump = {}
 
 if os.path.exists('teams'):
     try:
-        filehandler = open('teams', 'rb') 
-        object = pickle.load(filehandler)
-    except:
+        with open("teams", "rb") as f:
+            pickleDump = pickle.load(f)
+            for key in pickleDump:
+                teamDict[key] = clsTeam()
+                teamDict[key].importTeam(pickleDump[key])
+    except Exception as e:
         for x in range(server.teams):
             teamDict["Team-"+str(x)] = clsTeam()
             teamDict["Team-"+str(x)].teamName = "Team-"+str(x)
-        filehandler = open('teams', 'wb')
-        pickle.dump(teamDict, filehandler)
+            pickleDump["Team-"+str(x)] = teamDict["Team-"+str(x)].export()
+        with open("teams", "wb") as f:
+            pickle.dump(pickleDump, f)
+        print("ERROR",e)
 else:
     for x in range(server.teams):
         teamDict["Team-"+str(x)] = clsTeam()
         teamDict["Team-"+str(x)].teamName = "Team-"+str(x)
-    filehandler = open('teams', 'wb')
-    pickle.dump(teamDict, filehandler)
+        pickleDump["Team-"+str(x)] = teamDict["Team-"+str(x)].export()
+    with open("teams", "wb") as f:
+        pickle.dump(pickleDump, f)
 
-for team in teamDict:
-    print(teamDict[team].teamName)
+print(pickleDump)
 
 async def autosave():
     await bot.wait_until_ready()
     while not bot.is_closed():
-        filehandler = open('teams', 'wb')
-        pickle.dump(teamDict, filehandler)
+        for x in range(server.teams):
+            if teamDict["Team-"+str(x)].vote["status"] == "active":
+                message = await bot.get_channel(teamDict["Team-"+str(x)].vote["channelID"]).fetch_message(teamDict["Team-"+str(x)].vote["messageID"])
+                
+                if (int(time.time()) - teamDict["Team-"+str(x)].vote["timestamp"]) > 600:
+                    yes = -1
+                    no = -1
+                    teamSize = len(bot.get_role(teamDict["Team-"+str(x)].teamID))
+
+                    if teamDict["Team-"+str(x)].vote["type"] == 'votekick':
+                        required = round((teamSize/100)*60)
+                    else:
+                        required = round((teamSize/100)*75)
+
+                    for reaction in message.reactions:
+                        if reaction == '✅':
+                            yes += 1
+                        if reaction == '❌':
+                            no += 1
+                    print("YES:",str(yes))
+                    print("NO:",str(no))
+                    print("REQUIRED:",str(required))
+                    if yes >= required and yes >= teamSize/2:
+                        if teamDict["Team-"+str(x)].vote["type"] == 'votekick':
+                            guild = bot.get_guild(114407194971209731)
+                            user = guild.get_member(teamDict["Team-"+str(x)].vote["targetID"])
+                            role = guild.get_role(teamDict["Team-"+str(x)].teamID)
+                            await bot.remove_roles(user, role)
+                        else:
+                            pool = []
+                            guild = bot.get_guild(114407194971209731)
+                            user = guild.get_member(teamDict["Team-"+str(x)].teamLeaderUser)
+                            leaderRole = guild.get_role(teamDict["Team-"+str(x)].teamLeaderID)
+                            memberRole = guild.get_role(teamDict["Team-"+str(x)].teamID)
+                            for member in guild.members:
+                                for role in member.roles:
+                                    if role.id == memberRole.id:
+                                        print(member)
+                                        pool.append(member)
+
+                            newLeader = random.choice(pool)
+                            await newLeader.add_roles(leaderRole)
+                            teamDict["Team-"+str(x)].teamLeaderUser = newLeader.id
+                            channel = guild.get_channel(teamDict["Team-"+str(x)].generalChannel)
+                            await channel.send("Vote results: YES wins")
+                            await channel.send(" was set as leader")
+
+                    else:
+                        channel = guild.get_channel(teamDict["Team-"+str(x)].generalChannel)
+                        await channel.send("Vote results: NO wins")
+                    teamDict["Team-"+str(x)].vote["status"] = "finished"
+
+        for x in range(server.teams):
+            pickleDump["Team-"+str(x)] = teamDict["Team-"+str(x)].export()
+        with open("teams", "wb") as f:
+            pickle.dump(pickleDump, f)
         print("State saved")
-        await asyncio.sleep(60)
+
+        await asyncio.sleep(10)
 
 @bot.command()
 @commands.has_any_role(server.admin)
@@ -72,6 +156,41 @@ async def save(ctx,id):
     filehandler = open('teams', 'wb')
     pickle.dump(teamDict, filehandler)
     await ctx.send("State saved")
+
+@bot.command()
+async def votekick(ctx,arg):
+    guild = ctx.message.guild
+    kickMember = guild.get_member(int(arg[3:-1]))
+    for role in ctx.message.author.roles:
+        if "leader" in role.name and ctx.message.author.id != kickMember.id:
+            team = "Team-"+role.name.split("-")[1]
+            if (time.time() - teamDict[team].vote["timestamp"]) > 3600:
+                await ctx.send(kickMember.mention)
+                embed = discord.Embed(title=team + " vote", description="Votekicking "+kickMember.mention +". Requires at least 50% of the team to vote and at least 60% of votes need to be yes to kick.", color=0xff0000)
+                message = await ctx.message.channel.send(embed=embed)
+                teamDict[team].vote = {"timestamp":int(time.time()),"type":"votekick","status":"active","targetID":kickMember.id,"messageID":message.id,"channelID":ctx.channel.id}
+            else:
+                await ctx.send("You must wait at least an hour after the last vote to start another!")
+
+@bot.command()
+async def mutiny(ctx):
+    guild = ctx.message.guild
+    kickMember = guild.get_member(int(arg[3:-1]))
+    for role in ctx.message.author.roles:
+        if "team" in role.name:
+            team = "Team-"+role.name.split("-")[1]
+            if (time.time() - teamDict[team].vote["timestamp"]) > 3600:
+                await ctx.send(kickMember.mention)
+                embed = discord.Embed(title=team + " vote", description="The team has declared mutiny! If this passes, the team leader will be removed and another member will be given the role at random. Requires at least 50% of the team to vote and at least 75% of votes need to be yes to kick.", color=0xff0000)
+                message = await ctx.message.channel.send(embed=embed)
+                teamDict[team].vote = {"timestamp":int(time.time()),"type":"votekick","status":"active","targetID":kickMember.id,"messageID":message.id,"channelID":ctx.channel.id}
+            else:
+                await ctx.send("You must wait at least an hour after the last vote to start another!")
+
+@bot.command()
+@commands.has_any_role(server.admin)
+async def teaminfo(ctx,arg):
+    await ctx.send(str(teamDict[arg].export()))
 
 @bot.command()
 @commands.has_any_role(server.admin)
@@ -107,6 +226,25 @@ async def rolemembers(ctx,arg):
             output += "{0.name}: {0.id}".format(member) + "\n"
     await ctx.send(output)
 
+@bot.command()
+@commands.has_any_role(server.admin)
+async def setleader(ctx,arg):
+    pool = []
+    guild = bot.get_guild(114407194971209731)
+    #user = guild.get_member(int(arg[3:-1]))
+    leaderRole = guild.get_role(teamDict[arg].teamLeaderID)
+    memberRole = guild.get_role(teamDict[arg].teamID)
+    await ctx.send(str(leaderRole.id)+ " " +str(memberRole.id))
+    for member in guild.members:
+        for role in member.roles:
+            if role.id == memberRole.id:
+                print(member)
+                pool.append(member)
+
+    newLeader = random.choice(pool)
+    await newLeader.add_roles(leaderRole)
+    teamDict[arg].teamLeaderUser = newLeader.id
+    await ctx.send(str(newLeader.id) + " was set as leader")
 
 @bot.command()
 @commands.has_any_role(server.admin)
