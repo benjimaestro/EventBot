@@ -199,7 +199,6 @@ async def rolemembers(ctx,arg):
     guild = ctx.message.guild
     role = guild.get_role(687814139065925647)
     memberList = []
-    output = ""
     if role is None:
         await ctx.send('There is no participant role!')
         return
@@ -220,11 +219,12 @@ async def rolemembers(ctx,arg):
     memberListSplit = list(chunks(memberList, arg))
     x = 0
     for team in memberListSplit:
+        output = ""
         output += "Team "+str(x)+"\n"
         x += 1
         for member in team:
             output += "{0.name}: {0.id}".format(member) + "\n"
-    await ctx.send(output)
+        await ctx.send(output)
 
 @bot.command()
 @commands.has_any_role(server.admin)
